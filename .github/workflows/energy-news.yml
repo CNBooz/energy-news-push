@@ -1,9 +1,7 @@
 name: 能源电力要闻推送
 
 on:
-  schedule:
-    - cron: '0 12 * * *'  # 北京时间 20:00 = UTC 12:00
-  workflow_dispatch:        # 允许手动触发
+  workflow_dispatch:        # 手动触发
 
 jobs:
   build:
