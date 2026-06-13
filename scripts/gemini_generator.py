@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-通义千问 API 调用模块 - 生成能源电力要闻汇总
-（已适配阿里云百炼平台，国内可直接访问）
+DeepSeek API 调用模块 - 生成能源电力要闻汇总
+（已适配 DeepSeek 平台，国内可直接访问，超低价）
 """
 
 import os
@@ -10,12 +10,12 @@ import requests
 import json
 from datetime import datetime
 
-# 通义千问 API 配置（兼容 OpenAI 格式）
-QWEN_API_URL = "https://bailian.console.aliyuncs.com/compatible-mode/v1/chat/completions"
+# DeepSeek API 配置（兼容 OpenAI 格式）
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 def generate_energy_news(articles, history_titles):
     """
-    使用通义千问 API 生成能源电力要闻汇总
+    使用 DeepSeek API 生成能源电力要闻汇总
     
     Args:
         articles: 新闻列表
@@ -24,9 +24,9 @@ def generate_energy_news(articles, history_titles):
     Returns:
         str: 生成的 Markdown 内容
     """
-    api_key = os.environ.get("QWEN_API_KEY")
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        raise ValueError("❌ 未设置 QWEN_API_KEY 环境变量")
+        raise ValueError("❌ 未设置 DEEPSEEK_API_KEY 环境变量")
     
     # 过滤掉历史中已经出现过的标题
     new_articles = [a for a in articles if a["title"] not in history_titles]
@@ -80,8 +80,8 @@ def generate_energy_news(articles, history_titles):
 - 如果某主题没有合适新闻，可以选择其他主题补充
 """
 
-    # 调用通义千问 API（兼容 OpenAI 格式）
-    print("🤖 正在调用通义千问 API 生成要闻汇总...")
+    # 调用 DeepSeek API（兼容 OpenAI 格式）
+    print("🤖 正在调用 DeepSeek API 生成要闻汇总...")
     
     headers = {
         "Content-Type": "application/json",
@@ -89,7 +89,8 @@ def generate_energy_news(articles, history_titles):
     }
     
     data = {
-        "model": "qwen-turbo",  # 免费额度模型，可选 qwen-plus（更强）
+        "model": "deepseek-chat",  # 使用 DeepSeek-V3（便宜）
+        # 可选：deepseek-reasoner（推理模型，贵一些）
         "messages": [
             {"role": "user", "content": prompt}
         ],
@@ -98,17 +99,17 @@ def generate_energy_news(articles, history_titles):
     }
     
     try:
-        response = requests.post(QWEN_API_URL, headers=headers, json=data, timeout=60)
+        response = requests.post(DEEPSEEK_API_URL, headers=headers, json=data, timeout=60)
         response.raise_for_status()
         
         result = response.json()
         generated_text = result["choices"][0]["message"]["content"]
         
-        print("✅ 通义千问生成完成")
+        print("✅ DeepSeek 生成完成")
         return generated_text
         
     except Exception as e:
-        print(f"❌ 通义千问 API 调用失败: {e}")
+        print(f"❌ DeepSeek API 调用失败: {e}")
         if hasattr(e, 'response') and hasattr(e.response, 'text'):
             print(f"   错误详情: {e.response.text}")
         # 返回简单的备用内容
@@ -145,9 +146,9 @@ if __name__ == "__main__":
         {"title": "测试新闻2", "source": "国家电网", "link": "http://example.com/2", "summary": "摘要2"},
     ]
     
-    # 需要设置环境变量 QWEN_API_KEY 才能测试
-    if os.environ.get("QWEN_API_KEY"):
+    # 需要设置环境变量 DEEPSEEK_API_KEY 才能测试
+    if os.environ.get("DEEPSEEK_API_KEY"):
         result = generate_energy_news(test_articles, set())
         print(result[:500])  # 打印前 500 字符
     else:
-        print("⚠️ 请先设置 QWEN_API_KEY 环境变量")
+        print("⚠️ 请先设置 DEEPSEEK_API_KEY 环境变量")
