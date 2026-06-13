@@ -57,35 +57,75 @@ jobs:
         if [ -f "$MD_FILE" ]; then
           echo "[IMA] 开始归档文件: $MD_FILE"
           
-          # Step 1: preflight check
+          # Step 1: preflight check（检查文件是否可上传）
           echo "[IMA] [1/5] preflight check..."
-          PREFLIGHT=$(node scripts/preflight-check.cjs --file "$MD_FILE" 2>&1)
-          echo "$PREFLIGHT"
+          node scripts/preflight-check.cjs --file "$MD_FILE" > /tmp/preflight_output.json 2>&1
+          cat /tmp/preflight_output.json
           
           # 提取字段
-          FILE_NAME=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_name)")
-          FILE_EXT=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_ext)")
-          FILE_SIZE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.file_size))")
-          MEDIA_TYPE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.media_type))")
-          CONTENT_TYPE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.content_type)")
+          FILE_NAME=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_name)")
+          FILE_EXT=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_ext)")
+          FILE_SIZE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.file_size))")
+          MEDIA_TYPE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.media_type))")
+          CONTENT_TYPE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.content_type)")
           
           echo "[IMA] file_name=$FILE_NAME, media_type=$MEDIA_TYPE, size=$FILE_SIZE"
           
+          PASS=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.pass ? 'true' : 'false')")
+          if [ "$PASS" != "true" ]; then
+            echo "[IMA] ❌ preflight check 失败，跳过归档"
+            exit 0
+          fi
+          
           # Step 2: check repeated names
           echo "[IMA] [2/5] check repeated names..."
-          check_repeated_names "openapi/wiki/v1/check_repeated_names" "{\"params\": [{\"name\": \"$FILE_NAME\", \"media_type\": $MEDIA_TYPE}], \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\"}"
+          node scripts/ima_api.cjs "openapi/wiki/v1/check_repeated_names" "{\"params\": [{\"name\": \"$FILE_NAME\", \"media_type\": $MEDIA_TYPE}], \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\"}" > /tmp/check_repeated.json 2>&1
+          cat /tmp/check_repeated.json
           
           # Step 3: create media
           echo "[IMA] [3/5] create media..."
-          CREATE_RESP=$(node scripts/ima_api.cjs "openapi/wiki/v1/create_media" "{\"file_name\": \"$FILE_NAME\", \"file_size\": $FILE_SIZE, \"content_type\": \"$CONTENT_TYPE\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_ext\": \"$FILE_EXT\"}" 2>&1)
-          echo "$CREATE_RESP"
+          node scripts/ima_api.cjs "openapi/wiki/v1/create_media" "{\"file_name\": \"$FILE_NAME\", \"file_size\": $FILE_SIZE, \"content_type\": \"$CONTENT_TYPE\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_ext\": \"$FILE_EXT\"}" > /tmp/create_media.json 2>&1
+          cat /tmp/create_media.json
           
           # 提取 media_id 和 COS 凭证
-          MEDIA_ID=$(echo "$CREATE_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.data && d.data.media_id || '')")
+          MEDIA_ID=$(cat /tmp/create_media.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write((d.data && d.data.media_id) || '')")
           echo "[IMA] media_id=$MEDIA_ID"
           
-          # TODO: Step 4 (COS upload) and Step 5 (add_knowledge)
-          echo "[IMA] TODO: 完成 COS 上传和添加到知识库"
+          if [ -z "$MEDIA_ID" ]; then
+            echo "[IMA] ❌ 未获取到 media_id，跳过归档"
+            exit 0
+          fi
+          
+          # 提取 COS 凭证
+          cat /tmp/create_media.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(JSON.stringify((d.data && d.data.cos_credential) || {}))" > /tmp/cos_credential.json
+          
+          # Step 4: 上传文件到 COS
+          echo "[IMA] [4/5] 上传文件到 COS..."
+          node scripts/cos-upload.cjs \
+            --file "$MD_FILE" \
+            --secret-id "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).secret_id || '')")" \
+            --secret-key "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).secret_key || '')")" \
+            --token "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).token || '')")" \
+            --bucket "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).bucket_name || '')")" \
+            --region "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).region || '')")" \
+            --cos-key "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).cos_key || '')")" \
+            --content-type "$CONTENT_TYPE" \
+            --start-time "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).start_time || '')")" \
+            --expired-time "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).expired_time || '')")" \
+            --timeout 300000
+          
+          COS_EXIT=$?
+          if [ $COS_EXIT -ne 0 ]; then
+            echo "[IMA] ❌ COS 上传失败，跳过归档"
+            exit 0
+          fi
+          
+          # Step 5: 添加到知识库
+          echo "[IMA] [5/5] 添加到知识库..."
+          node scripts/ima_api.cjs "openapi/wiki/v1/add_knowledge" "{\"media_type\": $MEDIA_TYPE, \"media_id\": \"$MEDIA_ID\", \"title\": \"$FILE_NAME\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_info\": {\"cos_key\": \"$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).cos_key || '')")\", \"file_size\": $FILE_SIZE, \"file_name\": \"$FILE_NAME\"}}" > /tmp/add_knowledge.json 2>&1
+          cat /tmp/add_knowledge.json
+          
+          echo "[IMA] ✅ 已成功归档到 IMA 知识库！"
           
         else
           echo "[IMA] 未找到 markdown 文件: $MD_FILE，跳过归档"
