@@ -25,11 +25,11 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: 安装依赖
+    - name: 安装 Python 依赖
       run: |
         pip install -r requirements.txt
 
-    - name: 运行能源电力要闻脚本
+    - name: 运行能源电力要闻脚本（抓取+生成+发邮件）
       env:
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         QQ_EMAIL_ACCOUNT: ${{ secrets.QQ_EMAIL_ACCOUNT }}
@@ -39,6 +39,57 @@ jobs:
         TZ: Asia/Shanghai
       run: |
         python scripts/energy_news.py
+
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: 归档到 IMA 知识库
+      env:
+        IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+        IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+      run: |
+        # 查找今天生成的 markdown 文件
+        DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+        MD_FILE="output/${DATE}.md"
+        
+        if [ -f "$MD_FILE" ]; then
+          echo "[IMA] 开始归档文件: $MD_FILE"
+          
+          # Step 1: preflight check
+          echo "[IMA] [1/5] preflight check..."
+          PREFLIGHT=$(node scripts/preflight-check.cjs --file "$MD_FILE" 2>&1)
+          echo "$PREFLIGHT"
+          
+          # 提取字段
+          FILE_NAME=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_name)")
+          FILE_EXT=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_ext)")
+          FILE_SIZE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.file_size))")
+          MEDIA_TYPE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.media_type))")
+          CONTENT_TYPE=$(echo "$PREFLIGHT" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.content_type)")
+          
+          echo "[IMA] file_name=$FILE_NAME, media_type=$MEDIA_TYPE, size=$FILE_SIZE"
+          
+          # Step 2: check repeated names
+          echo "[IMA] [2/5] check repeated names..."
+          check_repeated_names "openapi/wiki/v1/check_repeated_names" "{\"params\": [{\"name\": \"$FILE_NAME\", \"media_type\": $MEDIA_TYPE}], \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\"}"
+          
+          # Step 3: create media
+          echo "[IMA] [3/5] create media..."
+          CREATE_RESP=$(node scripts/ima_api.cjs "openapi/wiki/v1/create_media" "{\"file_name\": \"$FILE_NAME\", \"file_size\": $FILE_SIZE, \"content_type\": \"$CONTENT_TYPE\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_ext\": \"$FILE_EXT\"}" 2>&1)
+          echo "$CREATE_RESP"
+          
+          # 提取 media_id 和 COS 凭证
+          MEDIA_ID=$(echo "$CREATE_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.data && d.data.media_id || '')")
+          echo "[IMA] media_id=$MEDIA_ID"
+          
+          # TODO: Step 4 (COS upload) and Step 5 (add_knowledge)
+          echo "[IMA] TODO: 完成 COS 上传和添加到知识库"
+          
+        else
+          echo "[IMA] 未找到 markdown 文件: $MD_FILE，跳过归档"
+        fi
 
     - name: 提交 history 文件
       run: |
