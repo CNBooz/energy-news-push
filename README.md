@@ -1,24 +1,26 @@
 # 能源电力要闻 - GitHub Actions 自动化
 
-每天自动抓取能源电力行业新闻，通过 Gemini AI 生成要闻汇总，发送邮件并归档到知识库。
+每天自动抓取能源电力行业新闻，通过 **通义千问 AI** 生成要闻汇总，发送邮件并归档到知识库。
 
 ## ✨ 功能特性
 
 - 📰 **自动抓取**：从国家能源局、国家电网、能源杂志等网站抓取最新新闻
-- 🤖 **AI 生成**：使用 Google Gemini Flash 免费生成专业要闻汇总
+- 🤖 **AI 生成**：使用 **通义千问（阿里云百炼）** 免费生成专业要闻汇总
 - 📧 **邮件推送**：自动发送到 QQ 邮箱
 - 📚 **知识库归档**：自动归档到 IMA 知识库（可选）
 - ⏰ **定时运行**：每天北京时间 20:00 自动运行
 
 ## 🚀 快速开始
 
-### 1. 获取 Gemini API Key（免费）
+### 1. 获取通义千问 API Key（免费）
 
-1. 访问 [Google AI Studio](https://aistudio.google.com/apikey)
-2. 登录 Google 账号
-3. 创建 API Key（免费额度：15 次/分钟，1500 次/天）
+1. 访问 [阿里云百炼平台](https://bailian.console.aliyun.com/)
+2. 登录阿里云账号（没有就注册）
+3. 进入 **"API Key 管理"** → **"创建 API Key"**
+4. 复制 Key（格式：`sk-xxxxxxxxxx`）
+5. **免费额度**：100 万 Token（够用很久）
 
-### 2. Fork 或创建仓库
+### 2. 创建仓库
 
 将本仓库推送到你的 GitHub 账号下。
 
@@ -28,7 +30,7 @@
 
 | Secret 名称 | 说明 | 获取方式 |
 |-------------|------|----------|
-| `GEMINI_API_KEY` | Gemini API Key | 从 Google AI Studio 获取 |
+| `QWEN_API_KEY` | 通义千问 API Key | 从 [阿里云百炼](https://bailian.console.aliyun.com/) 获取 |
 | `QQ_EMAIL_ACCOUNT` | QQ 邮箱账号 | 你的 QQ 邮箱（如：67340337@qq.com） |
 | `QQ_EMAIL_AUTH_CODE` | QQ 邮箱授权码 | QQ 邮箱 → 设置 → 账户 → 开启 SMTP → 获取授权码 |
 | `IMA_CLIENT_ID` | IMA 客户端 ID（可选） | 从 IMA 平台获取 |
@@ -86,10 +88,10 @@ schedule:
 
 ## 🐛 故障排查
 
-### Gemini API 调用失败
+### 通义千问 API 调用失败
 
-- 检查 `GEMINI_API_KEY` 是否正确
-- 检查是否超出免费额度（1500 次/天）
+- 检查 `QWEN_API_KEY` 是否正确
+- 检查是否超出免费额度（100 万 Token）
 - 查看 GitHub Actions 日志
 
 ### 邮件发送失败
@@ -108,6 +110,6 @@ MIT License
 
 ## 🙏 致谢
 
-- [Google Gemini](https://ai.google.dev/) - 免费 AI 生成
+- [通义千问 (阿里云百炼)](https://bailian.console.aliyun.com/) - 免费 AI 生成
 - [GitHub Actions](https://github.com/features/actions) - 免费自动化
 - [feedparser](https://feedparser.readthedocs.io/) - RSS 解析库
