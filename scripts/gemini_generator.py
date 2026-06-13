@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gemini API 调用模块 - 生成能源电力要闻汇总
+通义千问 API 调用模块 - 生成能源电力要闻汇总
+（已适配阿里云百炼平台，国内可直接访问）
 """
 
 import os
@@ -9,11 +10,12 @@ import requests
 import json
 from datetime import datetime
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+# 通义千问 API 配置（兼容 OpenAI 格式）
+QWEN_API_URL = "https://bailian.console.aliyuncs.com/compatible-mode/v1/chat/completions"
 
 def generate_energy_news(articles, history_titles):
     """
-    使用 Gemini API 生成能源电力要闻汇总
+    使用通义千问 API 生成能源电力要闻汇总
     
     Args:
         articles: 新闻列表
@@ -22,9 +24,9 @@ def generate_energy_news(articles, history_titles):
     Returns:
         str: 生成的 Markdown 内容
     """
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("QWEN_API_KEY")
     if not api_key:
-        raise ValueError("❌ 未设置 GEMINI_API_KEY 环境变量")
+        raise ValueError("❌ 未设置 QWEN_API_KEY 环境变量")
     
     # 过滤掉历史中已经出现过的标题
     new_articles = [a for a in articles if a["title"] not in history_titles]
@@ -78,39 +80,42 @@ def generate_energy_news(articles, history_titles):
 - 如果某主题没有合适新闻，可以选择其他主题补充
 """
 
-    # 调用 Gemini API
-    print("🤖 正在调用 Gemini API 生成要闻汇总...")
+    # 调用通义千问 API（兼容 OpenAI 格式）
+    print("🤖 正在调用通义千问 API 生成要闻汇总...")
     
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 2048
-        }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
     }
     
-    url = f"{GEMINI_API_URL}?key={api_key}"
+    data = {
+        "model": "qwen-turbo",  # 免费额度模型，可选 qwen-plus（更强）
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 2000
+    }
     
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=60)
+        response = requests.post(QWEN_API_URL, headers=headers, json=data, timeout=60)
         response.raise_for_status()
         
         result = response.json()
-        generated_text = result["candidates"][0]["content"]["parts"][0]["text"]
+        generated_text = result["choices"][0]["message"]["content"]
         
-        print("✅ Gemini 生成完成")
+        print("✅ 通义千问生成完成")
         return generated_text
         
     except Exception as e:
-        print(f"❌ Gemini API 调用失败: {e}")
+        print(f"❌ 通义千问 API 调用失败: {e}")
+        if hasattr(e, 'response') and hasattr(e.response, 'text'):
+            print(f"   错误详情: {e.response.text}")
         # 返回简单的备用内容
         return generate_fallback_news(new_articles[:8], today)
 
 def generate_fallback_news(articles, today):
-    """备用方案：如果 Gemini 失败，生成简单列表"""
+    """备用方案：如果 API 失败，生成简单列表"""
     lines = [f"# 能源电力要闻 {today}\n"]
     lines.append("## 今日要闻\n")
     
@@ -140,5 +145,9 @@ if __name__ == "__main__":
         {"title": "测试新闻2", "source": "国家电网", "link": "http://example.com/2", "summary": "摘要2"},
     ]
     
-    result = generate_energy_news(test_articles, set())
-    print(result[:500])  # 打印前 500 字符
+    # 需要设置环境变量 QWEN_API_KEY 才能测试
+    if os.environ.get("QWEN_API_KEY"):
+        result = generate_energy_news(test_articles, set())
+        print(result[:500])  # 打印前 500 字符
+    else:
+        print("⚠️ 请先设置 QWEN_API_KEY 环境变量")
