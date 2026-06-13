@@ -1,146 +1,58 @@
-name: 能源电力要闻每日推送
+name: 能源电力要闻推送
 
 on:
   schedule:
-    # 每天北京时间 20:00 运行（UTC+8 = UTC 12:00）
-    - cron: '0 12 * * *'
-  workflow_dispatch:  # 支持手动触发
-
-permissions:
-  contents: write  # 允许提交 history 文件
+    - cron: '0 12 * * *'  # 北京时间 20:00 = UTC 12:00
+  workflow_dispatch:        # 允许手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # 获取完整历史，用于去重
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: 设置 Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: 安装 Python 依赖
-      run: |
-        pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: 运行能源电力要闻脚本（抓取+生成+发邮件）
-      env:
-        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        QQ_EMAIL_ACCOUNT: ${{ secrets.QQ_EMAIL_ACCOUNT }}
-        QQ_EMAIL_AUTH_CODE: ${{ secrets.QQ_EMAIL_AUTH_CODE }}
-        IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
-        IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
-        TZ: Asia/Shanghai
-      run: |
-        python scripts/energy_news.py
+      - name: Generate news and send email
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          QQ_EMAIL_ACCOUNT: ${{ secrets.QQ_EMAIL_ACCOUNT }}
+          QQ_EMAIL_AUTH_CODE: ${{ secrets.QQ_EMAIL_AUTH_CODE }}
+          TARGET_EMAIL: ${{ secrets.TARGET_EMAIL }}
+        run: |
+          cd scripts
+          python energy_news.py
 
-    - name: 设置 Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: 归档到 IMA 知识库
-      env:
-        IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
-        IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
-      run: |
-        # 查找今天生成的 markdown 文件
-        DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
-        MD_FILE="output/${DATE}.md"
-        
-        if [ -f "$MD_FILE" ]; then
-          echo "[IMA] 开始归档文件: $MD_FILE"
-          
-          # Step 1: preflight check（检查文件是否可上传）
-          echo "[IMA] [1/5] preflight check..."
-          node scripts/preflight-check.cjs --file "$MD_FILE" > /tmp/preflight_output.json 2>&1
-          cat /tmp/preflight_output.json
-          
-          # 提取字段
-          FILE_NAME=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_name)")
-          FILE_EXT=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.file_ext)")
-          FILE_SIZE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.file_size))")
-          MEDIA_TYPE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(d.media_type))")
-          CONTENT_TYPE=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.content_type)")
-          
-          echo "[IMA] file_name=$FILE_NAME, media_type=$MEDIA_TYPE, size=$FILE_SIZE"
-          
-          PASS=$(cat /tmp/preflight_output.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.pass ? 'true' : 'false')")
-          if [ "$PASS" != "true" ]; then
-            echo "[IMA] ❌ preflight check 失败，跳过归档"
-            exit 0
+      - name: Upload HTML to IMA Knowledge Base
+        if: success()
+        env:
+          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+          IMA_KB_ID: ${{ secrets.IMA_KB_ID }}
+        run: |
+          cd scripts
+          # 检查 HTML 文件是否存在
+          if [ -f "energy_news.html" ]; then
+            echo "Found energy_news.html, uploading to IMA..."
+            node ima_api.cjs
+          else
+            echo "No HTML file found, skipping IMA upload"
+            ls -la
           fi
-          
-          # Step 2: check repeated names
-          echo "[IMA] [2/5] check repeated names..."
-          node scripts/ima_api.cjs "openapi/wiki/v1/check_repeated_names" "{\"params\": [{\"name\": \"$FILE_NAME\", \"media_type\": $MEDIA_TYPE}], \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\"}" > /tmp/check_repeated.json 2>&1
-          cat /tmp/check_repeated.json
-          
-          # Step 3: create media
-          echo "[IMA] [3/5] create media..."
-          node scripts/ima_api.cjs "openapi/wiki/v1/create_media" "{\"file_name\": \"$FILE_NAME\", \"file_size\": $FILE_SIZE, \"content_type\": \"$CONTENT_TYPE\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_ext\": \"$FILE_EXT\"}" > /tmp/create_media.json 2>&1
-          cat /tmp/create_media.json
-          
-          # 提取 media_id 和 COS 凭证
-          MEDIA_ID=$(cat /tmp/create_media.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write((d.data && d.data.media_id) || '')")
-          echo "[IMA] media_id=$MEDIA_ID"
-          
-          if [ -z "$MEDIA_ID" ]; then
-            echo "[IMA] ❌ 未获取到 media_id，跳过归档"
-            exit 0
-          fi
-          
-          # 提取 COS 凭证
-          cat /tmp/create_media.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(JSON.stringify((d.data && d.data.cos_credential) || {}))" > /tmp/cos_credential.json
-          
-          # Step 4: 上传文件到 COS
-          echo "[IMA] [4/5] 上传文件到 COS..."
-          node scripts/cos-upload.cjs \
-            --file "$MD_FILE" \
-            --secret-id "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).secret_id || '')")" \
-            --secret-key "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).secret_key || '')")" \
-            --token "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).token || '')")" \
-            --bucket "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).bucket_name || '')")" \
-            --region "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).region || '')")" \
-            --cos-key "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).cos_key || '')")" \
-            --content-type "$CONTENT_TYPE" \
-            --start-time "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).start_time || '')")" \
-            --expired-time "$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).expired_time || '')")" \
-            --timeout 300000
-          
-          COS_EXIT=$?
-          if [ $COS_EXIT -ne 0 ]; then
-            echo "[IMA] ❌ COS 上传失败，跳过归档"
-            exit 0
-          fi
-          
-          # Step 5: 添加到知识库
-          echo "[IMA] [5/5] 添加到知识库..."
-          node scripts/ima_api.cjs "openapi/wiki/v1/add_knowledge" "{\"media_type\": $MEDIA_TYPE, \"media_id\": \"$MEDIA_ID\", \"title\": \"$FILE_NAME\", \"knowledge_base_id\": \"E9owuqdzTE2LcRB0A5ub04_cxrGGpMzCmFQEahJ8te0=\", \"file_info\": {\"cos_key\": \"$(cat /tmp/cos_credential.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).cos_key || '')")\", \"file_size\": $FILE_SIZE, \"file_name\": \"$FILE_NAME\"}}" > /tmp/add_knowledge.json 2>&1
-          cat /tmp/add_knowledge.json
-          
-          echo "[IMA] ✅ 已成功归档到 IMA 知识库！"
-          
-        else
-          echo "[IMA] 未找到 markdown 文件: $MD_FILE，跳过归档"
-        fi
 
-    - name: 提交 history 文件
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
-        if [ -f "output/${DATE}.md" ]; then
-          cp "output/${DATE}.md" "history/${DATE}.md"
-          git add history/
-          git commit -m "chore: 更新 ${DATE} 历史记录" || echo "No changes to commit"
-          git push || echo "Push failed, will retry next run"
-        fi
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Debug - List files
+        if: always()
+        run: |
+          echo "=== Workspace files ==="
+          ls -la scripts/
+          echo "=== Check HTML ==="
+          cat scripts/energy_news.html 2>/dev/null || echo "No HTML file"
