@@ -55,10 +55,38 @@ def main():
         from gemini_generator import generate_fallback_news
         markdown_content = generate_fallback_news(articles, datetime.now().strftime("%Y年%m月%d日"))
     
-    # Step 4: 保存 Markdown
-    print("\n[Step 4/4] 保存 Markdown")
+    # Step 4: 保存 Markdown 和 HTML
+    print("\n[Step 4/4] 保存 Markdown 和 HTML")
     md_path = save_markdown(markdown_content, "../output")
     print(f"  保存到: {md_path}")
+    
+    # 生成 HTML 文件（用于 IMA 归档）
+    import markdown
+    html_content = markdown.markdown(markdown_content, extensions=['extra', 'codehilite'])
+    # 添加 HTML 包装
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>能源电力要闻 - {datetime.now().strftime('%Y年%m月%d日')}</title>
+    <style>
+        body {{ font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }}
+        h1 {{ color: #333; }}
+        h2 {{ color: #555; margin-top: 30px; }}
+        a {{ color: #0066cc; }}
+        .date {{ color: #888; font-size: 0.9em; }}
+    </style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+    
+    # 保存到 scripts/ 目录（供 IMA 步骤上传）
+    html_path = os.path.join(os.path.dirname(__file__), "energy_news.html")
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(full_html)
+    print(f"  HTML 保存到: {html_path}")
     print(f"  ✅ 文件已保存，等待 workflow 中的 Node.js 步骤完成 IMA 归档")
     
     # Step 5: 发送邮件
