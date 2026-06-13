@@ -1,0 +1,55 @@
+name: 能源电力要闻每日推送
+
+on:
+  schedule:
+    # 每天北京时间 20:00 运行（UTC+8 = UTC 12:00）
+    - cron: '0 12 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+permissions:
+  contents: write  # 允许提交 history 文件
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史，用于去重
+
+    - name: 设置 Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: |
+        pip install -r requirements.txt
+
+    - name: 运行能源电力要闻脚本
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        QQ_EMAIL_ACCOUNT: ${{ secrets.QQ_EMAIL_ACCOUNT }}
+        QQ_EMAIL_AUTH_CODE: ${{ secrets.QQ_EMAIL_AUTH_CODE }}
+        IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+        IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+        TZ: Asia/Shanghai
+      run: |
+        python scripts/energy_news.py
+
+    - name: 提交 history 文件
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+        if [ -f "output/${DATE}.md" ]; then
+          cp "output/${DATE}.md" "history/${DATE}.md"
+          git add history/
+          git commit -m "chore: 更新 ${DATE} 历史记录" || echo "No changes to commit"
+          git push || echo "Push failed, will retry next run"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
