@@ -37,7 +37,7 @@ def get_headers():
     
     return {
         "ima-openapi-clientid": CLIENT_ID,
-        "ima-openapi-apikey": api_key,
+        "ima-openapi-key": api_key,
         "Content-Type": "application/json"
     }
 
