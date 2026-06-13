@@ -1,24 +1,24 @@
 # 能源电力要闻 - GitHub Actions 自动化
 
-每天自动抓取能源电力行业新闻，通过 **通义千问 AI** 生成要闻汇总，发送邮件并归档到知识库。
+每天自动抓取能源电力行业新闻，通过 **DeepSeek AI** 生成要闻汇总，发送邮件并归档到知识库。
 
 ## ✨ 功能特性
 
 - 📰 **自动抓取**：从国家能源局、国家电网、能源杂志等网站抓取最新新闻
-- 🤖 **AI 生成**：使用 **通义千问（阿里云百炼）** 免费生成专业要闻汇总
+- 🤖 **AI 生成**：使用 **DeepSeek-V3** 生成专业要闻汇总（超低价）
 - 📧 **邮件推送**：自动发送到 QQ 邮箱
 - 📚 **知识库归档**：自动归档到 IMA 知识库（可选）
 - ⏰ **定时运行**：每天北京时间 20:00 自动运行
 
 ## 🚀 快速开始
 
-### 1. 获取通义千问 API Key（免费）
+### 1. 获取 DeepSeek API Key（超低价）
 
-1. 访问 [阿里云百炼平台](https://bailian.console.aliyun.com/)
-2. 登录阿里云账号（没有就注册）
-3. 进入 **"API Key 管理"** → **"创建 API Key"**
+1. 访问 [DeepSeek 开放平台](https://platform.deepseek.com/)
+2. 注册登录
+3. 进入 **"API Keys"** → **"创建 API Key"**
 4. 复制 Key（格式：`sk-xxxxxxxxxx`）
-5. **免费额度**：100 万 Token（够用很久）
+5. **价格**：约 ¥0.001/千 Token（充值 ¥10 可用很久）
 
 ### 2. 创建仓库
 
@@ -30,7 +30,7 @@
 
 | Secret 名称 | 说明 | 获取方式 |
 |-------------|------|----------|
-| `QWEN_API_KEY` | 通义千问 API Key | 从 [阿里云百炼](https://bailian.console.aliyun.com/) 获取 |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | 从 [DeepSeek 平台](https://platform.deepseek.com/) 获取 |
 | `QQ_EMAIL_ACCOUNT` | QQ 邮箱账号 | 你的 QQ 邮箱（如：67340337@qq.com） |
 | `QQ_EMAIL_AUTH_CODE` | QQ 邮箱授权码 | QQ 邮箱 → 设置 → 账户 → 开启 SMTP → 获取授权码 |
 | `IMA_CLIENT_ID` | IMA 客户端 ID（可选） | 从 IMA 平台获取 |
@@ -50,7 +50,7 @@
 ├── scripts/                            # Python 脚本
 │   ├── energy_news.py                  # 主脚本
 │   ├── rss_fetcher.py                 # 新闻抓取
-│   ├── gemini_generator.py            # Gemini AI 调用
+│   ├── gemini_generator.py            # DeepSeek AI 调用（原 gemini 命名保留）
 │   ├── email_sender.py                # 邮件发送
 │   └── ima_uploader.py               # IMA 归档（可选）
 ├── output/                             # 生成的文件（.gitignore）
@@ -88,10 +88,10 @@ schedule:
 
 ## 🐛 故障排查
 
-### 通义千问 API 调用失败
+### DeepSeek API 调用失败
 
-- 检查 `QWEN_API_KEY` 是否正确
-- 检查是否超出免费额度（100 万 Token）
+- 检查 `DEEPSEEK_API_KEY` 是否正确
+- 检查账户余额是否充足（约 ¥0.001/千 Token）
 - 查看 GitHub Actions 日志
 
 ### 邮件发送失败
@@ -110,6 +110,6 @@ MIT License
 
 ## 🙏 致谢
 
-- [通义千问 (阿里云百炼)](https://bailian.console.aliyun.com/) - 免费 AI 生成
+- [DeepSeek](https://www.deepseek.com/) - 超低价 AI 生成
 - [GitHub Actions](https://github.com/features/actions) - 免费自动化
 - [feedparser](https://feedparser.readthedocs.io/) - RSS 解析库
